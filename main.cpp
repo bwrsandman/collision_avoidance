@@ -77,7 +77,7 @@ struct Simulation
   std::vector<RVO::Vector2> goals;
 };
 
-class Renderer
+struct Renderer
 {
   struct options_t
   {
@@ -175,8 +175,10 @@ public:
       static_cast<float>(std::max(width, height)) * 0.5f +
       (simulation_options.circleRadius + simulation_options.radius) *
         options.scale;
-    ImGui::SliderFloat2("Offset", &options.offset_x, -offset_max, offset_max + 1);
-    ImGui::SliderFloat("Time Scale", &simulation_options.time_scale, 0.01, 100, "%.3f", 2.0f);
+    ImGui::SliderFloat2(
+      "Offset", &options.offset_x, -offset_max, offset_max + 1);
+    ImGui::SliderFloat(
+      "Time Scale", &simulation_options.time_scale, 0.01, 100, "%.3f", 2.0f);
     ImGui::SliderFloat(
       "Neighbor Distance (m)", &simulation_options.neighborDist, 0, 50);
     ImGui::SliderInt("Max Neighbors", &simulation_options.maxNeighbors, 0, 50);
@@ -225,13 +227,19 @@ public:
       auto point = simulation.simulator->getAgentPosition(i);
       int x = width / 2 + point.x() * options.scale + options.offset_x;
       int y = height / 2 - point.y() * options.scale + options.offset_y;
-      SDL_Rect rect{
-        static_cast<int>(x - simulation_options.radius * options.scale),
-        static_cast<int>(y - simulation_options.radius * options.scale),
-        static_cast<int>(simulation_options.radius * 2 * options.scale),
-        static_cast<int>(simulation_options.radius * 2 * options.scale),
-      };
-      SDL_RenderDrawRect(renderer, &rect);
+      int w = static_cast<int>(simulation_options.radius * 2 * options.scale);
+      int h = static_cast<int>(simulation_options.radius * 2 * options.scale);
+      if (w > 1 && h > 1) {
+        SDL_Rect rect{
+          static_cast<int>(x - simulation_options.radius * options.scale),
+          static_cast<int>(y - simulation_options.radius * options.scale),
+          w,
+          h,
+        };
+        SDL_RenderDrawRect(renderer, &rect);
+      } else {
+        SDL_RenderDrawPoint(renderer, x, y);
+      }
     }
 
     ImGui::Render();
@@ -258,7 +266,6 @@ public:
     return io.WantCaptureKeyboard;
   }
 
-private:
   SDL_Window* window;
   SDL_Renderer* renderer;
   ImGuiContext* ui;
@@ -305,6 +312,17 @@ public:
         return false;
       } else if (event.type == SDL_MOUSEBUTTONDOWN &&
                  !renderer.ui_want_capture_mouse()) {
+      } else if (event.type == SDL_MOUSEWHEEL &&
+                 !renderer.ui_want_capture_mouse()) {
+        renderer.options.scale += event.wheel.y * 0.01 * renderer.options.scale;
+        if (renderer.options.scale < 0) {
+          renderer.options.scale = 0.0f;
+        }
+      } else if (event.type == SDL_MOUSEMOTION &&
+                 event.motion.state == SDL_PRESSED &&
+                 !renderer.ui_want_capture_mouse()) {
+        renderer.options.offset_x += event.motion.xrel;
+        renderer.options.offset_y += event.motion.yrel;
       } else if (event.type == SDL_KEYDOWN &&
                  !renderer.ui_want_capture_keyboard()) {
         switch (event.key.keysym.scancode) {

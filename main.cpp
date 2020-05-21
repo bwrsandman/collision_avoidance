@@ -25,7 +25,7 @@ struct Simulation
     _CONFIGURATION_COUNT,
   };
   static constexpr std::array<std::string_view, _CONFIGURATION_COUNT>
-    configuration_strings {
+    configuration_strings{
       "Circle",
       "Deadlock",
     };
@@ -56,6 +56,13 @@ struct Simulation
                                 options.timeHorizonObst,
                                 options.radius,
                                 options.maxSpeed);
+
+    for (const auto& obstacle : obstacles) {
+      simulator->addObstacle(obstacle);
+    }
+    if (!obstacles.empty()) {
+      simulator->processObstacles();
+    }
 
     /*
      * Add agents, specifying their start position, and store their goals on the
@@ -95,8 +102,20 @@ struct Simulation
     simulator->doStep();
   }
 
+  void commit_obstacle()
+  {
+    if (staging_obstacle.size() > 2) {
+      simulator->addObstacle(staging_obstacle);
+      simulator->processObstacles();
+      obstacles.emplace_back(staging_obstacle);
+    }
+    staging_obstacle.clear();
+  }
+
   std::unique_ptr<RVO::RVOSimulator> simulator;
   std::vector<RVO::Vector2> goals;
+  std::vector<RVO::Vector2> staging_obstacle;
+  std::vector<std::vector<RVO::Vector2>> obstacles;
 };
 
 struct Renderer
@@ -179,6 +198,22 @@ public:
     SDL_Quit();
   }
 
+  RVO::Vector2 toScreenSpace(const RVO::Vector2& point)
+  {
+    return {
+      width / 2 + options.offset_x + point.x() * options.scale,
+      height / 2 + options.offset_y - point.y() * options.scale,
+    };
+  }
+
+  RVO::Vector2 fromScreenSpace(const RVO::Vector2& point)
+  {
+    return RVO::Vector2{
+      point.x() - width / 2 - options.offset_x,
+      -point.y() + height / 2 + options.offset_y,
+    } / options.scale;
+  }
+
   void draw(float dt,
             Simulation& simulation,
             Simulation::options_t& simulation_options)
@@ -190,7 +225,10 @@ public:
     ImGui::Text("dt: %.5f seconds", dt);
     ImGui::Text("Keyboard controls:\n"
                 "\tSpacebar: Pause/Continue Simulation.\n"
-                "\tBackspace: Reset Simulation.");
+                "\tBackspace: Reset Simulation.\n"
+                "Mouse controls:\n"
+                "\tDouble click to add obstacle vertex\n"
+                "\tRight click to finish obstacle");
 
     ImGui::SliderFloat("Zoom", &options.scale, 0.01, 100, "%.3f", 2.0f);
     float offset_max =
@@ -251,35 +289,70 @@ public:
     if (simulation_options.show_goal) {
       SDL_SetRenderDrawColor(renderer, 0x3F, 0x3F, 0x3F, SDL_ALPHA_OPAQUE);
       for (uint32_t i = 0; i < simulation.simulator->getNumAgents(); ++i) {
-        auto point = simulation.simulator->getAgentPosition(i);
-        int x = width / 2 + point.x() * options.scale + options.offset_x;
-        int y = height / 2 - point.y() * options.scale + options.offset_y;
-        int goal_x = width / 2 + simulation.goals[i].x() * options.scale +
-                     options.offset_x;
-        int goal_y = height / 2 - simulation.goals[i].y() * options.scale +
-                     options.offset_y;
-        SDL_RenderDrawLine(renderer, x, y, goal_x, goal_y);
+        auto point = toScreenSpace(simulation.simulator->getAgentPosition(i));
+        auto goal = toScreenSpace(simulation.goals[i]);
+        SDL_RenderDrawLine(renderer, point.x(), point.y(), goal.x(), goal.y());
       }
     }
 
     SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, SDL_ALPHA_OPAQUE);
     for (uint32_t i = 0; i < simulation.simulator->getNumAgents(); ++i) {
-      auto point = simulation.simulator->getAgentPosition(i);
-      int x = width / 2 + point.x() * options.scale + options.offset_x;
-      int y = height / 2 - point.y() * options.scale + options.offset_y;
+      auto point = toScreenSpace(simulation.simulator->getAgentPosition(i));
       int w = static_cast<int>(simulation_options.radius * 2 * options.scale);
       int h = static_cast<int>(simulation_options.radius * 2 * options.scale);
       if (w > 1 && h > 1) {
         SDL_Rect rect{
-          static_cast<int>(x - simulation_options.radius * options.scale),
-          static_cast<int>(y - simulation_options.radius * options.scale),
+          static_cast<int>(point.x() -
+                           simulation_options.radius * options.scale),
+          static_cast<int>(point.y() -
+                           simulation_options.radius * options.scale),
           w,
           h,
         };
         SDL_RenderDrawRect(renderer, &rect);
       } else {
-        SDL_RenderDrawPoint(renderer, x, y);
+        SDL_RenderDrawPoint(renderer, point.x(), point.y());
       }
+    }
+
+    // Obstacles
+    SDL_SetRenderDrawColor(renderer, 0x7F, 0x7F, 0x7F, SDL_ALPHA_OPAQUE);
+    RVO::Vector2 previous;
+    for (const auto& obstacle : simulation.obstacles) {
+      if (obstacle.size() < 3) {
+        continue;
+      }
+      previous = toScreenSpace(obstacle.back());
+      for (auto i : obstacle) {
+        auto point = toScreenSpace(i);
+        SDL_RenderDrawLine(
+          renderer, previous.x(), previous.y(), point.x(), point.y());
+        previous = point;
+      }
+    }
+
+    // Staging obstacle
+    SDL_SetRenderDrawColor(renderer, 0x7F, 0x7F, 0x7F, SDL_ALPHA_OPAQUE);
+    for (uint32_t i = 0; i < simulation.staging_obstacle.size(); ++i) {
+      auto point = toScreenSpace(simulation.staging_obstacle[i]);
+      SDL_RenderDrawPoint(renderer, point.x(), point.y());
+      if (i > 0) {
+        SDL_RenderDrawLine(
+          renderer, previous.x(), previous.y(), point.x(), point.y());
+      }
+      previous = point;
+    }
+    if (!simulation.staging_obstacle.empty()) {
+      int x, y;
+      SDL_GetMouseState(&x, &y);
+      auto point = toScreenSpace(simulation.staging_obstacle[0]);
+      SDL_RenderDrawLine(renderer, point.x(), point.y(), x, y);
+    }
+    if (simulation.staging_obstacle.size() > 1) {
+      int x, y;
+      SDL_GetMouseState(&x, &y);
+      auto point = toScreenSpace(simulation.staging_obstacle.back());
+      SDL_RenderDrawLine(renderer, point.x(), point.y(), x, y);
     }
 
     ImGui::Render();
@@ -352,6 +425,15 @@ public:
         return false;
       } else if (event.type == SDL_MOUSEBUTTONDOWN &&
                  !renderer.ui_want_capture_mouse()) {
+        if (event.button.button == SDL_BUTTON_LEFT &&
+            event.button.clicks == 2) {
+          simulation.staging_obstacle.emplace_back(renderer.fromScreenSpace(
+            RVO::Vector2(event.button.x, event.button.y)));
+        } else if (event.button.button == SDL_BUTTON_RIGHT) {
+          simulation.staging_obstacle.emplace_back(renderer.fromScreenSpace(
+            RVO::Vector2(event.button.x, event.button.y)));
+          simulation.commit_obstacle();
+        }
       } else if (event.type == SDL_MOUSEWHEEL &&
                  !renderer.ui_want_capture_mouse()) {
         renderer.options.scale += event.wheel.y * 0.01 * renderer.options.scale;

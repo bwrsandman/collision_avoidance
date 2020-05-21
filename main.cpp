@@ -170,13 +170,13 @@ public:
                 "\tSpacebar: Pause/Continue Simulation.\n"
                 "\tBackspace: Reset Simulation.");
 
-    ImGui::SliderFloat("Zoom", &options.scale, 0, 2);
+    ImGui::SliderFloat("Zoom", &options.scale, 0.01, 100, "%.3f", 2.0f);
     float offset_max =
       static_cast<float>(std::max(width, height)) * 0.5f +
       (simulation_options.circleRadius + simulation_options.radius) *
         options.scale;
     ImGui::SliderFloat2("Offset", &options.offset_x, -offset_max, offset_max + 1);
-    ImGui::SliderFloat("Time Scale", &simulation_options.time_scale, 0, 500);
+    ImGui::SliderFloat("Time Scale", &simulation_options.time_scale, 0.01, 100, "%.3f", 2.0f);
     ImGui::SliderFloat(
       "Neighbor Distance (m)", &simulation_options.neighborDist, 0, 50);
     ImGui::SliderInt("Max Neighbors", &simulation_options.maxNeighbors, 0, 50);

@@ -273,6 +273,12 @@ public:
       ImGui::EndCombo();
     }
 
+    if (!simulation.staging_obstacle.empty()) {
+      if (ImGui::Button("Add Obstacle")) {
+        simulation.commit_obstacle();
+      }
+    }
+
     if (ImGui::Button("Reset")) {
       simulation.initialize(simulation_options);
     }
@@ -342,17 +348,26 @@ public:
       }
       previous = point;
     }
-    if (!simulation.staging_obstacle.empty()) {
-      int x, y;
-      SDL_GetMouseState(&x, &y);
-      auto point = toScreenSpace(simulation.staging_obstacle[0]);
-      SDL_RenderDrawLine(renderer, point.x(), point.y(), x, y);
-    }
-    if (simulation.staging_obstacle.size() > 1) {
-      int x, y;
-      SDL_GetMouseState(&x, &y);
-      auto point = toScreenSpace(simulation.staging_obstacle.back());
-      SDL_RenderDrawLine(renderer, point.x(), point.y(), x, y);
+    if (ui_want_capture_mouse()) {
+      if (simulation.staging_obstacle.size() > 2) {
+        auto point_1 = toScreenSpace(simulation.staging_obstacle[0]);
+        auto point_2 = toScreenSpace(simulation.staging_obstacle.back());
+        SDL_RenderDrawLine(
+          renderer, point_1.x(), point_1.y(), point_2.x(), point_2.y());
+      }
+    } else {
+      if (!simulation.staging_obstacle.empty()) {
+        int x, y;
+        SDL_GetMouseState(&x, &y);
+        auto point = toScreenSpace(simulation.staging_obstacle[0]);
+        SDL_RenderDrawLine(renderer, point.x(), point.y(), x, y);
+      }
+      if (simulation.staging_obstacle.size() > 1) {
+        int x, y;
+        SDL_GetMouseState(&x, &y);
+        auto point = toScreenSpace(simulation.staging_obstacle.back());
+        SDL_RenderDrawLine(renderer, point.x(), point.y(), x, y);
+      }
     }
 
     ImGui::Render();

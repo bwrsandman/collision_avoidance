@@ -1,6 +1,8 @@
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <memory>
+#include <string_view>
 
 #include <RVOSimulator.h>
 #include <SDL.h>
@@ -15,8 +17,21 @@
 
 struct Simulation
 {
+  enum configuration_t
+  {
+    CIRCLE,
+    DEADLOCK,
+
+    _CONFIGURATION_COUNT,
+  };
+  static constexpr std::array<std::string_view, _CONFIGURATION_COUNT>
+    configuration_strings {
+      "Circle",
+      "Deadlock",
+    };
   struct options_t
   {
+    configuration_t configuration{ CIRCLE };
     bool run_simulation{ false };
     bool show_goal{ false };
     float time_scale{ 10.0f };
@@ -47,13 +62,20 @@ struct Simulation
      * opposite side of the environment.
      */
     goals.clear();
-    goals.reserve(options.numAgents);
-    for (size_t i = 0; i < options.numAgents; ++i) {
-      simulator->addAgent(
-        options.circleRadius *
-        RVO::Vector2(std::cos(i * 2 * M_PI / options.numAgents),
-                     std::sin(i * 2 * M_PI / options.numAgents)));
-      goals.push_back(-simulator->getAgentPosition(i));
+    if (options.configuration == CIRCLE) {
+      goals.reserve(options.numAgents);
+      for (size_t i = 0; i < options.numAgents; ++i) {
+        simulator->addAgent(
+          options.circleRadius *
+          RVO::Vector2(std::cos(i * 2 * M_PI / options.numAgents),
+                       std::sin(i * 2 * M_PI / options.numAgents)));
+        goals.push_back(-simulator->getAgentPosition(i));
+      }
+    } else if (options.configuration == DEADLOCK) {
+      simulator->addAgent(RVO::Vector2(-2 * options.radius, 0));
+      goals.emplace_back(10 * options.radius, 0);
+      simulator->addAgent(RVO::Vector2(2 * options.radius, 0));
+      goals.emplace_back(-10 * options.radius, 0);
     }
   }
 
@@ -195,6 +217,24 @@ public:
 
     ImGui::Checkbox("Show Goal", &simulation_options.show_goal);
     ImGui::Checkbox("Run Simulation", &simulation_options.run_simulation);
+
+    auto item_current =
+      Simulation::configuration_strings[simulation_options.configuration];
+    if (ImGui::BeginCombo("Configuration", item_current.data())) {
+      for (int n = 0; n < Simulation::configuration_strings.size(); n++) {
+        bool is_selected =
+          (item_current == Simulation::configuration_strings[n]);
+        if (ImGui::Selectable(Simulation::configuration_strings[n].data(),
+                              is_selected)) {
+          simulation_options.configuration =
+            static_cast<Simulation::configuration_t>(n);
+        }
+        if (is_selected)
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndCombo();
+    }
+
     if (ImGui::Button("Reset")) {
       simulation.initialize(simulation_options);
     }

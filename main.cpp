@@ -80,10 +80,33 @@ struct Simulation
         goals.push_back(-simulator->getAgentPosition(i));
       }
     } else if (options.configuration == DEADLOCK) {
-      simulator->addAgent(RVO::Vector2(-2 * options.radius, 0));
-      goals.emplace_back(10 * options.radius, 0);
-      simulator->addAgent(RVO::Vector2(2 * options.radius, 0));
-      goals.emplace_back(-10 * options.radius, 0);
+      // Phalanx moving right
+      for (uint8_t i = 0; i < 2; ++i) {
+        for (uint8_t j = 0; j < 12; ++j) {
+          simulator->addAgent(RVO::Vector2((-5 - 2 * i) * options.radius,
+                                           (j * 2) * options.radius));
+          goals.emplace_back((40 - 2 * i) * options.radius, (j * 2) * options.radius);
+          if (j > 0) {
+            simulator->addAgent(RVO::Vector2((-5 - 2 * i) * options.radius,
+                                             (j * -2) * options.radius));
+            goals.emplace_back((40 - 2 * i) * options.radius, (j * -2) * options.radius);
+          }
+        }
+      }
+
+      // Single agent moving left trying get passed Phalanx
+      simulator->addAgent(RVO::Vector2(5 * options.radius, 0));
+      goals.emplace_back(-40 * options.radius, 0);
+
+      // Two collinear agents
+      simulator->addAgent(RVO::Vector2((-2 - 20) * options.radius, -10));
+      goals.emplace_back((10 - 20) * options.radius, -10);
+      simulator->addAgent(RVO::Vector2((2 - 20) * options.radius, -10));
+      goals.emplace_back((-10 - 20) * options.radius, -10);
+
+      // Agent going down who will disrupt the collinear deadlock
+      simulator->addAgent(RVO::Vector2(-20 * options.radius, 100));
+      goals.emplace_back(-20 * options.radius, -100);
     }
 
     set_preferred_velocities();

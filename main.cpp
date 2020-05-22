@@ -34,6 +34,7 @@ struct Simulation
     configuration_t configuration{ CIRCLE };
     bool run_simulation{ false };
     bool show_goal{ false };
+    bool show_velocity{ true };
     float time_scale{ 10.0f };
     float neighborDist{ 15.0f };
     int maxNeighbors{ 10 };
@@ -84,6 +85,8 @@ struct Simulation
       simulator->addAgent(RVO::Vector2(2 * options.radius, 0));
       goals.emplace_back(-10 * options.radius, 0);
     }
+
+    set_preferred_velocities();
   }
 
   void set_preferred_velocities()
@@ -125,6 +128,9 @@ struct Renderer
     float scale{ 1.5f };
     float offset_x{ 300 };
     float offset_y{ 0 };
+    uint8_t background_color[3] = { 0x37, 0x47, 0x4F };
+    uint8_t goal_color[3] = { 0x00, 0x00, 0x00 };
+    uint8_t velocity_color[3] = { 0x23, 0xC7, 0xAC };
   };
 
 public:
@@ -254,6 +260,8 @@ public:
       "Radius of Circle (m)", &simulation_options.circleRadius, 0, 1000);
 
     ImGui::Checkbox("Show Goal", &simulation_options.show_goal);
+    ImGui::Checkbox("Show Preferred velocity",
+                    &simulation_options.show_velocity);
     ImGui::Checkbox("Run Simulation", &simulation_options.run_simulation);
 
     auto item_current =
@@ -289,14 +297,43 @@ public:
     };
     SDL_RenderSetClipRect(renderer, &clip);
 
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+    SDL_SetRenderDrawColor(renderer,
+                           options.background_color[0],
+                           options.background_color[1],
+                           options.background_color[2],
+                           SDL_ALPHA_OPAQUE);
     SDL_RenderClear(renderer);
 
     if (simulation_options.show_goal) {
-      SDL_SetRenderDrawColor(renderer, 0x3F, 0x3F, 0x3F, SDL_ALPHA_OPAQUE);
+      SDL_SetRenderDrawColor(renderer,
+                             options.goal_color[0],
+                             options.goal_color[1],
+                             options.goal_color[2],
+                             SDL_ALPHA_OPAQUE);
       for (uint32_t i = 0; i < simulation.simulator->getNumAgents(); ++i) {
         auto point = toScreenSpace(simulation.simulator->getAgentPosition(i));
         auto goal = toScreenSpace(simulation.goals[i]);
+        SDL_RenderDrawLine(renderer, point.x(), point.y(), goal.x(), goal.y());
+      }
+    }
+
+    if (simulation_options.show_velocity) {
+      SDL_SetRenderDrawColor(renderer,
+                             options.velocity_color[0],
+                             options.velocity_color[1],
+                             options.velocity_color[2],
+                             SDL_ALPHA_OPAQUE);
+      for (uint32_t i = 0; i < simulation.simulator->getNumAgents(); ++i) {
+        auto point = toScreenSpace(simulation.simulator->getAgentPosition(i));
+        auto pref_velocity = simulation.simulator->getAgentPrefVelocity(i);
+        auto max_speed = simulation.simulator->getAgentMaxSpeed(i);
+        auto goal = simulation.simulator->getAgentPosition(i);
+        if (RVO::absSq(pref_velocity) > max_speed * max_speed) {
+          goal += RVO::normalize(pref_velocity) * max_speed;
+        } else {
+          goal += pref_velocity;
+        }
+        goal = toScreenSpace(goal);
         SDL_RenderDrawLine(renderer, point.x(), point.y(), goal.x(), goal.y());
       }
     }
